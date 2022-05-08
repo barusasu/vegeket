@@ -24,7 +24,6 @@ root = environ.Path(BASE_DIR / 'secrets')
 
 # 開発環境用
 env.read_env(root('.env.dev'))
-root = environ.Path(BASE_DIR / 'secrets')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
@@ -137,3 +136,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # 消費税率
 TAX_RATE = 0.1
+
+# Stripe API Key
+STRIPE_API_SECRET_KEY = env.str('STRIPE_API_SECRET_KEY')
+
+# スキーマ＆ドメイン
+MY_URL = env.str('MY_URL')
