@@ -1,5 +1,5 @@
 from django.contrib import admin
-from base.models import Item, Category, Tag, User, Profile
+from base.models import Item, Category, Tag, User, Profile, Order
 from django.contrib.auth.models import Group
 from base.forms import UserCreationForm
 from django.contrib.auth.admin import UserAdmin
@@ -35,7 +35,7 @@ class CustomUserAdmin(UserAdmin):
     add_form = UserCreationForm
     inlines = (ProfileInline,)
 
-
+admin.site.register(Order)
 admin.site.register(Item, ItemAdmin)
 admin.site.register(Category)
 admin.site.register(Tag)

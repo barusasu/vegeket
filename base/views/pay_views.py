@@ -2,10 +2,12 @@ from django.shortcuts import redirect
 from django.views.generic import View, TemplateView
 from django.conf import settings
 from stripe.api_resources import tax_rate
-from base.models import Item
+from base.models import Item, Order
 from django.contrib.auth.mixins import LoginRequiredMixin
 import stripe
- 
+from django.core import serializers
+import json
+
 stripe.api_key = settings.STRIPE_API_SECRET_KEY
  
  
@@ -14,7 +16,10 @@ class PaySuccessView(LoginRequiredMixin, TemplateView):
  
     def get(self, request, *args, **kwargs):
         # 最新のOrderオブジェクトを取得し、注文確定に変更
- 
+        order = Order.objects.filter(user=request.user).order_by('-created_at')[0]
+        order.is_confirmed = True # 注文確定
+        order.save()
+
         # カート情報削除
         del request.session['cart']
  
@@ -26,11 +31,19 @@ class PayCancelView(LoginRequiredMixin, TemplateView):
  
     def get(self, request, *args, **kwargs):
         # 最新のOrderオブジェクトを取得
- 
+        order = Order.objects.filter(
+            user=request.user).order_by('-created_at')[0]
         # 在庫数と販売数を元の状態に戻す
- 
+        for elem in json.loads(order.items):
+            item = Item.objects.get(pk=elem['pk'])
+            item.sold_count -= elem['quantity']
+            item.stock += elem['quantity']
+            item.save()
+
         # is_confirmedがFalseであれば削除（仮オーダー削除）
- 
+        if not order.is_confirmed:
+            order.delete()
+
         return super().get(request, *args, **kwargs)
  
  
@@ -79,6 +92,7 @@ class PayWithStripe(LoginRequiredMixin, View):
         if cart is None or len(cart) == 0:
             return redirect('/')
  
+        items = []
         line_items = []
         for item_pk, quantity in cart['items'].items():
             item = Item.objects.get(pk=item_pk)
@@ -86,8 +100,32 @@ class PayWithStripe(LoginRequiredMixin, View):
                 item.price, item.name, quantity)
             line_items.append(line_item)
  
+            items.append({
+                'pk': item.pk,
+                'name': item.name,
+                'image': str(item.image),
+                'price': item.price,
+                'quantity': quantity,
+            })
+
+            # 在庫をこの時点で引いておく。注文キャンセルの場合は在庫を戻す
+            # 販売数も加算しておく
+            item.stock -= quantity
+            item.sold_count += quantity
+            item.save()
+
+        # 仮注文を作成(is_confirmed=False)
+        Order.objects.create(
+            user=request.user,
+            uid=request.user.pk,
+            items=json.dumps(items),
+            shipping=serializers.serialize("json", [request.user.profile]),
+            amount=cart['total'],
+            tax_included=cart['tax_included_total']
+        )
+
         checkout_session = stripe.checkout.Session.create(
-            # customer_email=request.user.email,
+            customer_email=request.user.email,
             payment_method_types=['card'],
             line_items=line_items,
             mode='payment',
